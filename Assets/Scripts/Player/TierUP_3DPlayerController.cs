@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 
 public class TierUP_3DPlayerController : MonoBehaviour
 {
@@ -11,6 +12,11 @@ public class TierUP_3DPlayerController : MonoBehaviour
     [SerializeField] private float _rotateSpeed = 700f;
     [SerializeField] private float _jumpForce = 7f;
     [SerializeField] private float _groundCheckRadius = 0.2f;
+
+    public event Action<EntityAnimState> OnStateChanged;
+    public event Action<float> OnMoveSpeedChanged;
+
+    private EntityAnimState _currentState;
 
     private Vector2 _moveInput;
     private Vector3 _moveDirection;
@@ -30,6 +36,7 @@ public class TierUP_3DPlayerController : MonoBehaviour
     private void Update()
     {
         ReadInput();
+        UpdateAnimationState();
     }
 
     private void FixedUpdate()
@@ -43,7 +50,7 @@ public class TierUP_3DPlayerController : MonoBehaviour
     private void ReadInput()
     {
         _moveInput = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
-        _moveDirection = new Vector3(_moveInput.x, 0f, _moveInput.y);
+        _moveDirection = new Vector3(_moveInput.x, 0f, _moveInput.y).normalized;
 
         if (Input.GetKey(KeyCode.LeftShift) == true)
         {
@@ -83,7 +90,7 @@ public class TierUP_3DPlayerController : MonoBehaviour
         if (_moveDirection.sqrMagnitude > 0.01f)
         {
             Quaternion targetRotation = Quaternion.LookRotation(_moveDirection);
-            Rigidbody_Player.rotation = Quaternion.RotateTowards(Rigidbody_Player.rotation, targetRotation, _rotateSpeed * Time.fixedDeltaTime);
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, _rotateSpeed * Time.fixedDeltaTime);
         }
     }
 
@@ -96,6 +103,39 @@ public class TierUP_3DPlayerController : MonoBehaviour
             Rigidbody_Player.linearVelocity = jumpVelocity;
         }
         _jumpInput = false;
+    }
+
+    private void UpdateAnimationState()
+    {
+        float moveMagnitude = Mathf.Clamp01(_moveInput.magnitude);
+        float animSpeed = moveMagnitude;
+        if (_isRunning == true)
+        {
+            animSpeed = moveMagnitude * 2f;
+        }
+        OnMoveSpeedChanged?.Invoke(animSpeed);
+
+        EntityAnimState newState = DecideState();
+        if (newState != _currentState)
+        {
+            _currentState = newState;
+            OnStateChanged?.Invoke(_currentState);
+        }
+    }
+
+    private EntityAnimState DecideState()
+    {
+        if (_isGrounded == true)
+        {
+            return EntityAnimState.None;
+        }
+
+        if (Rigidbody_Player.linearVelocity.y > 0.1f)
+        {
+            return EntityAnimState.Jump;
+        }
+
+        return EntityAnimState.Fall;
     }
 
     private void OnDrawGizmos()
